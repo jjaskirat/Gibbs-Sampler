@@ -1,1 +1,1 @@
-# Gibbs-Sampler
+# Gibbs-Sampler for censored poisson model
