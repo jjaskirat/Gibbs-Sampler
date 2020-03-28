@@ -1,0 +1,162 @@
+---
+title: "a7 q1"
+author: "Jaskirat Singh Bhatia"
+date: "18/11/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+#library(readtext)
+data = read.csv("Data_Coal.csv")
+
+head(data)
+
+plot(data, main="Plot of Deaths Vs Year")
+
+```
+
+```{r eval=FALSE, echo=FALSE}
+
+plot.only=FALSE
+
+my.gibbs.PoissonExp<-function(y, a=0.5, b=0.01)
+{
+  
+  n <- length(y)
+  k.prob <- rep(NA,length=n)
+  for (i in 2:nrow(theta.matrix)) {
+    lambda <- rgamma(1,a+sum(y[1:theta.matrix[(i-1),3]]),b+theta.matrix[(i-1),3])
+    phi  <- rgamma(1,a+sum(y[theta.matrix[(i-1),3]:n]),b+length(y)-theta.matrix[(i-1),3])
+    for (j in 1:n) k.prob[j] <- exp(j*(phi-lambda))*(lambda/phi)^sum(y[1:j])
+    k.prob <- k.prob/sum(k.prob)
+    k   <- sample(1:n,size=1,prob=k.prob)
+    theta.matrix[i,] <- c(lambda,phi,k)
+  }
+  
+  return(list(x=x, 
+              lambda=lambda[,(burn.in+1):t.max],
+              theta=theta[(burn.in+1):t.max],
+              theta.empBayes=1/mean(x)))
+}
+
+my.plot <- function(obj, which.plot=NULL)
+{
+  # unpack 'obj'
+  x=obj$x
+  lambda=obj$lambda
+  theta=obj$theta
+  theta.empBayes = obj$theta.empBayes
+  
+  # prepare to plot
+  if (is.null(which.plot)) {        # if not specified, simply plot all
+    which.plot=1:length(x)
+  }
+  plotside=ceiling(sqrt(length(which.plot))) 
+  par(mfrow=c(plotside,plotside),mar=c(2,2,2,2)+0.1)
+
+  # plot posterior of lambda_i 
+  for (i in 1:(length(which.plot))){
+
+   # grab posterior sample from Gibbs
+   smpl=lambda[which.plot[i],]
+
+   # histogram of posterior sample 
+   hist(smpl,prob=TRUE,
+     main=substitute(paste(lambda[ii], '; ', X[ii], '=', val),
+                     list(ii=which.plot[i], val=x[which.plot[i]])),
+     xlab='',ylab='',border=F,col='grey')->obj
+
+   # add posterior density based on empirical Bayes to compare
+   xx=seq(min(smpl),max(smpl),len=100)
+   yy=dgamma(xx,shape=x[which.plot[i]]+1,rate=theta.empBayes+1)
+   lines(xx, yy, lwd=2, col='blue')
+
+   # add mean and variance summaries, from both Gibbs and empirical Bayes
+   text(0.5*(max(xx)+min(xx)), 0.9*max(obj$density), pos=4,
+    substitute(paste(E['Gibbs'],'=',eg),
+               list(eg=round(mean(smpl),2))))
+   text(0.5*(max(xx)+min(xx)), 0.8*max(obj$density), pos=4,
+    substitute(paste(E['empBayes'],'=',eeb),
+               list(eeb=round((x[which.plot[i]]+1)/(theta.empBayes+1),2))))
+   text(0.5*(max(xx)+min(xx)), 0.7*max(obj$density), pos=4,
+    substitute(paste(V['Gibbs'],'=',vg),
+               list(vg=round(var(smpl),2))))
+   text(0.5*(max(xx)+min(xx)), 0.6*max(obj$density), pos=4,
+    substitute(paste(V['empBayes'],'=',veb), 
+               list(veb=round((x[which.plot[i]]+1)/(theta.empBayes+1)^2,2))))
+  }
+
+  # plot posterior of theta
+  hist(theta,prob=TRUE,main=expression(theta), 
+    xlab='',ylab='',border=F,col='grey') -> obj
+  # add empirical Bayes estimate
+  abline(v=theta.empBayes,col='blue',lwd=2)	 
+  text(0.5*(max(theta)+min(theta)), 0.9*max(obj$density), pos=4,
+    substitute(paste(E['Gibbs'],'=',eg),
+               list(eg=round(mean(theta),2))))
+  text(0.5*(max(theta)+min(theta)), 0.8*max(obj$density), pos=4,
+    substitute(paste(hat(theta)['empBayes'],'=',eeb),
+               list(eeb=round(theta.empBayes,2))))
+} 
+
+if (!plot.only){
+mydata = data$disasters	 
+my.gibbs.PoissonExp(mydata, a=0.05, b=0.01)->junk
+}
+
+# total of 100 dimensions, so randomly choose 2 from each 'category' to plot
+my.plot(junk, which.plot=sort(      
+              c(1:2,
+                sample(3:10,size=2),
+                sample(11:30,size=2),
+                sample(31:100,size=2))))
+
+```
+
+```{r}
+pdf("q1")
+```
+
+```{r}
+
+gibbs <- function(theta.matrix,y,a,b) {
+  n <- length(y)
+  k.prob <- rep(NA,length=n)
+  for (i in 2:nrow(theta.matrix)) {
+    lambda1 <- rgamma(1,a+sum(y[1:theta.matrix[(i-1),3]]),b+theta.matrix[(i-1),3])
+    lambda2  <- rgamma(1,a+sum(y[theta.matrix[(i-1),3]:n]),b+length(y)-theta.matrix[(i-1),3])
+    for (j in 1:n) k.prob[j] <- exp(j*(lambda2-lambda1))*(lambda1/lambda2)^sum(y[1:j])
+    k.prob <- k.prob/sum(k.prob)
+    k   <- sample(1:n,size=1,prob=k.prob)
+    theta.matrix[i,] <- c(lambda1,lambda2,k)
+  }
+  return(theta.matrix)
+  }
+
+num.reps <- 2000
+coal.mat <- matrix(NA,ncol=3,nrow=num.reps)
+coal.mat[1,] <- c(1,1,100)
+alpha <- 4; beta <- 1; gamma <- 1; delta <- 2
+coal.mat <- gibbs(coal.mat,data$disasters,alpha,beta)
+
+library(knitr)
+kable(summary(coal.mat[1000:2000,]), col.names = c("Lambda1","Lambda2", "Theta"))
+
+
+```
+
+```{r}
+
+hist(coal.mat[,1], main = "Lambda1", prob=TRUE, ylab = " ", xlab = " ")
+hist(coal.mat[,2], main = "Lambda2", prob=TRUE, ylab = " ", xlab = " ")
+hist(coal.mat[,3], main = "Theta", prob=TRUE, ylab = " ", xlab = " ")
+
+
+```
+
+
